@@ -8,6 +8,6 @@ public class Greeter {
     }
 
     public String greet() {
-        return "Helloo, " + name + "!";
+        return "Hello, " + name + "!";
     }
 }
