@@ -1,0 +1,5 @@
+graphifyy[mcp]==0.9.118
+# Pin graph construction and Java parsing for reproducible source snapshots.
+networkx==3.7
+tree-sitter==0.25.2
+tree-sitter-java==0.23.5

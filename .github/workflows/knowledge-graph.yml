@@ -1,0 +1,56 @@
+name: Publish knowledge graph
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: knowledge-graph-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Set only if you want the producer to auto-trigger the consumer (PAT with
+    # 'repo' scope on the consumer repo). Leave the secret unset to skip the step.
+    env:
+      DISPATCH_TOKEN: ${{ secrets.CONSUMER_DISPATCH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned tools
+        run: |
+          python -m venv .venv-graphify
+          .venv-graphify/bin/python -m pip install -r requirements-graphify.txt
+      - name: Build code-only snapshot
+        run: |
+          .venv-graphify/bin/python scripts/build_snapshot.py \
+            --source src \
+            --repository "$GITHUB_REPOSITORY" \
+            --source-commit "$GITHUB_SHA" \
+            --graphify .venv-graphify/bin/graphify \
+            --output out
+      - name: Publish graph artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: graphify-sample-lib-${{ github.sha }}
+          path: |
+            out/graph.json
+            out/manifest.json
+          if-no-files-found: error
+          retention-days: 60
+      - name: Trigger consumer assembly (optional)
+        if: ${{ env.DISPATCH_TOKEN != '' }}
+        run: |
+          curl -fsSL -X POST \
+            -H "Authorization: Bearer $DISPATCH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/zouariste/gh-graph-consumer/dispatches" \
+            --data '{"event_type":"project-graph-published"}'
