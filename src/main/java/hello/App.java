@@ -7,5 +7,12 @@ public class App {
 
         Farewell farewell = new Farewell("world");
         System.out.println(farewell.bye());
+
+        AnimalRegistry registry = new AnimalRegistry();
+        registry.register(new Animal("Dog", "woof"));
+        registry.register(new Animal("Cat", "meow"));
+        for (Animal animal : registry.registered()) {
+            System.out.println(animal.speak());
+        }
     }
 }
