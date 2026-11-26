@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# graph-query — query this project's own published knowledge graph.
+#
+# Finds this repo's latest successful publish run, downloads its
+# graphify-sample-lib-<commit-sha> artifact ONLY when it changed, verifies the
+# checksum, caches it, then runs a graphify query. Fetched transparently.
+#
+#   scripts/graph-query "how does Greeter work"
+#   scripts/graph-query --explain "Greeter"
+#   scripts/graph-query --path "App" "Greeter"
+#
+# Needs a graphify binary: set GRAPHIFY_BIN, or create .venv-graphify from
+# requirements-graphify.txt, or have `graphify` on PATH. And `gh auth login -h github.com` once.
+set -euo pipefail
+
+export GH_HOST="${GH_HOST:-github.com}"
+REPO="${GRAPH_REPO:-zouariste/gh-graph-producer}"
+WORKFLOW="${GRAPH_WORKFLOW:-knowledge-graph.yml}"
+BRANCH="${GRAPH_BRANCH:-main}"
+ARTIFACT="${GRAPH_ARTIFACT:-}"
+ARTIFACT_PREFIX="${GRAPH_ARTIFACT_PREFIX:-graphify-sample-lib-}"
+CACHE="${GRAPH_CACHE:-$HOME/.cache/graph-query/$REPO}"
+BUDGET="${GRAPH_BUDGET:-2000}"
+
+GRAPHIFY="${GRAPHIFY_BIN:-}"
+if [ -z "$GRAPHIFY" ]; then
+  root=$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
+  if [ -x "$root/.venv-graphify/bin/graphify" ]; then
+    GRAPHIFY="$root/.venv-graphify/bin/graphify"
+  else
+    GRAPHIFY="graphify"
+  fi
+fi
+
+meta=$(gh run list --repo "$REPO" --workflow "$WORKFLOW" --branch "$BRANCH" \
+  --status success --limit 1 --json databaseId,headSha \
+  --jq '.[0] // empty | "\(.databaseId) \(.headSha)"' 2>/dev/null || true)
+RUN_ID="${meta%% *}"; HEAD_SHA="${meta##* }"
+if [ -z "$RUN_ID" ]; then
+  echo "graph-query: no successful '$WORKFLOW' run on '$BRANCH' in $REPO" >&2
+  echo "graph-query: if this is an auth error, run: gh auth login -h $GH_HOST" >&2
+  exit 1
+fi
+[ -n "$ARTIFACT" ] || ARTIFACT="${ARTIFACT_PREFIX}${HEAD_SHA}"
+
+mkdir -p "$CACHE"
+if [ "$(cat "$CACHE/.run_id" 2>/dev/null || true)" != "$RUN_ID" ]; then
+  echo "graph-query: fetching $ARTIFACT (run $RUN_ID) …" >&2
+  tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+  gh run download "$RUN_ID" --repo "$REPO" --name "$ARTIFACT" --dir "$tmp"
+  python3 - "$tmp" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+m = json.loads((p / "manifest.json").read_text())
+if hashlib.sha256((p / "graph.json").read_bytes()).hexdigest() != m["graph_sha256"]:
+    sys.exit("graph-query: checksum mismatch — refusing partial/corrupt artifact")
+PY
+  cp "$tmp/graph.json" "$tmp/manifest.json" "$CACHE"/
+  echo "$RUN_ID" > "$CACHE/.run_id"
+fi
+
+sub=query
+case "${1:-}" in
+  --query) sub=query; shift;; --path) sub=path; shift;;
+  --explain) sub=explain; shift;; --affected) sub=affected; shift;;
+  --god-nodes) sub=god-nodes; shift;;
+esac
+if [ "$sub" = "query" ]; then
+  exec "$GRAPHIFY" query "$@" --graph "$CACHE/graph.json" --budget "$BUDGET"
+else
+  exec "$GRAPHIFY" "$sub" "$@" --graph "$CACHE/graph.json"
+fi

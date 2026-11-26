@@ -40,3 +40,18 @@ python -m venv .venv-graphify
 Set the repo secret `CONSUMER_DISPATCH_TOKEN` (a token with `repo` access to the
 consumer) and each publish pings the consumer to reassemble. Leave it unset and
 the consumer just runs on its own schedule or on demand.
+
+## Query this project's published graph
+
+After a push publishes `graphify-sample-lib-<sha>`, query it directly.
+`scripts/graph-query` resolves the latest successful run, downloads that artifact
+**only when it changed**, verifies the checksum, caches it, then queries:
+
+```bash
+scripts/graph-query "how does Greeter work"
+scripts/graph-query --explain "Greeter"
+scripts/graph-query --path "App" "Greeter"
+```
+
+Needs `gh auth login -h github.com` once and a graphify binary (set `GRAPHIFY_BIN`,
+or create `.venv-graphify` from `requirements-graphify.txt`, or `graphify` on PATH).
