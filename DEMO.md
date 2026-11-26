@@ -29,9 +29,9 @@ Ask Claude (the `graph` skill), or run the commands directly:
 
 ```bash
 # local (in the producer checkout)
-.venv-graphify/bin/graphify query "Animal" --graph graphify-out/graph.json
+.venv-graphify/bin/graphify explain "AnimalRegistry" --graph graphify-out/graph.json
 # shared (in the consumer checkout — it holds the assembled graph)
-( cd ../consumer && scripts/graph-query --explain "Animal" )
+( cd ../consumer && scripts/graph-query --explain "AnimalRegistry" )
 ```
 
 Expected — there is no animal yet:
@@ -116,14 +116,16 @@ The hook rebuilds the graph of `src/` and stages `graphify-out/graph.json`.
 
 ## Step 4 — AFTER (local): ask again
 
-> **What registers animals?**
+> **What does `AnimalRegistry` connect to?**
 
 ```bash
-.venv-graphify/bin/graphify query "what registers animals" --graph graphify-out/graph.json
+.venv-graphify/bin/graphify explain "AnimalRegistry" --graph graphify-out/graph.json
+# or traverse from the registry: .venv-graphify/bin/graphify query "register" --graph graphify-out/graph.json
 ```
 
-Now — compare with Step 1 — you get `AnimalRegistry.register()` and
-`App.main() --calls--> register()`, immediately, before any CI.
+Now — compare with Step 1 — you get `main() --calls--> AnimalRegistry`,
+`AnimalRegistry --method--> register()/registered()`, and
+`AnimalRegistry --references--> Animal`, immediately, before any CI.
 
 ---
 
@@ -142,12 +144,12 @@ assembles a fresh `graphify-shared-baseline`.
 
 ## Step 6 — AFTER (shared): ask the shared graph
 
-> **Query the shared graph: what registers animals?**
+> **Query the shared graph: what does `AnimalRegistry` connect to?**
 
 ```bash
 cd ../consumer   # the consumer holds the assembled shared graph
-scripts/graph-query "what registers animals"
 scripts/graph-query --explain "AnimalRegistry"
+scripts/graph-query "register"
 ```
 
 Same relationships, now served from the **shared** graph the consumer assembled
