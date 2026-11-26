@@ -23,6 +23,10 @@ CACHE="${GRAPH_CACHE:-$HOME/.cache/graph-query/$REPO}"
 BUDGET="${GRAPH_BUDGET:-2000}"
 
 GRAPHIFY="${GRAPHIFY_BIN:-}"
+if [ -n "$GRAPHIFY" ] && [ ! -x "$GRAPHIFY" ]; then
+  echo "graph-query: GRAPHIFY_BIN='$GRAPHIFY' not executable; falling back" >&2
+  GRAPHIFY=""
+fi
 if [ -z "$GRAPHIFY" ]; then
   root=$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")
   if [ -x "$root/.venv-graphify/bin/graphify" ]; then
