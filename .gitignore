@@ -1,5 +1,6 @@
 .venv-graphify/
 out/
-graphify-out/
+graphify-out/*
+!graphify-out/graph.json
 src/graphify-out/
 __pycache__/

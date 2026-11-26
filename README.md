@@ -55,3 +55,16 @@ scripts/graph-query --path "App" "Greeter"
 
 Needs `gh auth login -h github.com` once and a graphify binary (set `GRAPHIFY_BIN`,
 or create `.venv-graphify` from `requirements-graphify.txt`, or `graphify` on PATH).
+
+## Local graph & git hook
+
+A pre-commit hook rebuilds the local code graph of `src/` and stages
+`graphify-out/graph.json`, so the committed graph always matches the committed
+source. Enable it once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+The `graph` skill (`.claude/skills/graph`) routes a question to the local graph
+(`graphify query`) or to `scripts/graph-query` for the published one.

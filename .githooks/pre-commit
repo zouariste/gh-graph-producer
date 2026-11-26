@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Pre-commit: rebuild the local code graph of src/ and stage it, so the committed
+# graph always matches the committed source. No LLM, deterministic.
+#
+# Enable once per clone:  git config core.hooksPath .githooks
+# Needs a graphify binary (GRAPHIFY_BIN, a local .venv-graphify, or graphify on
+# PATH); if none is found the hook skips rather than blocking your commit.
+set -euo pipefail
+
+GRAPHIFY="${GRAPHIFY_BIN:-}"
+if [ -z "$GRAPHIFY" ]; then
+  if [ -x ".venv-graphify/bin/graphify" ]; then
+    GRAPHIFY=".venv-graphify/bin/graphify"
+  elif command -v graphify >/dev/null 2>&1; then
+    GRAPHIFY="graphify"
+  else
+    echo "pre-commit: graphify not found — skipping graph refresh" >&2
+    exit 0
+  fi
+fi
+
+echo "pre-commit: refreshing local code graph of src/ …" >&2
+"$GRAPHIFY" update src --no-cluster --force >/dev/null
+mkdir -p graphify-out
+cp src/graphify-out/graph.json graphify-out/graph.json
+git add graphify-out/graph.json
