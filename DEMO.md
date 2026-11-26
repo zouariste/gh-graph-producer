@@ -1,9 +1,9 @@
 # Demo — watch a code change flow into the knowledge graph
 
-This walks through one change end to end: add an **animal registry** to the
-producer, and watch it appear first in the **local** graph (on commit) and then
-in the **shared** graph (after push → publish → auto-assemble). You ask both
-graphs through Claude's `graph` skill.
+One change, end to end: ask about animals **before** (nothing), add an **animal
+registry** to the producer, then ask again **after** — first the **local** graph
+(on commit), then the **shared** graph (after push → publish → auto-assemble).
+You ask both through Claude's `graph` skill.
 
 ```
 edit code ──commit──▶ local graph (pre-commit hook)
@@ -17,16 +17,34 @@ ask Claude ▶ "graph" skill ▶ shared graph (scripts/graph-query)
 ```bash
 gh auth login -h github.com                 # read runs/artifacts
 git config core.hooksPath .githooks         # enable the local-graph hook
-# a graphify binary — either create the venv once:
 python -m venv .venv-graphify && .venv-graphify/bin/pip install -r requirements-graphify.txt
-# …or point GRAPHIFY_BIN at an existing one.
+# …or point GRAPHIFY_BIN at an existing graphify.
 ```
 
 ---
 
-## Step 1 — add an animal
+## Step 1 — BEFORE: ask about animals (expect nothing)
 
-Create `src/main/java/hello/Animal.java`:
+Ask Claude (the `graph` skill), or run the commands directly:
+
+```bash
+# local (in the producer checkout)
+.venv-graphify/bin/graphify query "Animal" --graph graphify-out/graph.json
+# shared (in the consumer checkout — it holds the assembled graph)
+( cd ../consumer && scripts/graph-query --explain "Animal" )
+```
+
+Expected — there is no animal yet:
+
+```
+No node matching 'Animal' found.
+```
+
+---
+
+## Step 2 — add the animal
+
+`src/main/java/hello/Animal.java`:
 
 ```java
 package hello;
@@ -50,7 +68,7 @@ public class Animal {
 }
 ```
 
-Create `src/main/java/hello/AnimalRegistry.java`:
+`src/main/java/hello/AnimalRegistry.java`:
 
 ```java
 package hello;
@@ -71,7 +89,7 @@ public class AnimalRegistry {
 }
 ```
 
-Register a couple of animals from `App.main` (add inside `main`):
+Register animals from `App.main` (add inside `main`):
 
 ```java
 AnimalRegistry registry = new AnimalRegistry();
@@ -84,79 +102,57 @@ for (Animal animal : registry.registered()) {
 
 ---
 
-## Step 2 — commit (the local graph updates itself)
+## Step 3 — commit (the local graph updates itself)
 
 ```bash
 git add src
 git commit -m "add animal registry"
+# pre-commit: refreshing local code graph of src/ …
 ```
 
-The pre-commit hook rebuilds the graph of `src/` and stages
-`graphify-out/graph.json`, so the committed graph matches the committed code.
-You'll see:
-
-```
-pre-commit: refreshing local code graph of src/ …
-```
+The hook rebuilds the graph of `src/` and stages `graphify-out/graph.json`.
 
 ---
 
-## Step 3 — ask the LOCAL graph (via Claude)
-
-Open Claude Code in this repo and ask — the `graph` skill answers from the
-committed local graph:
+## Step 4 — AFTER (local): ask again
 
 > **What registers animals?**
-
-Or run what the skill runs:
 
 ```bash
 .venv-graphify/bin/graphify query "what registers animals" --graph graphify-out/graph.json
 ```
 
-Expect `AnimalRegistry.register()` and `App.main() --calls--> register()` — already
-present, before any CI.
+Now — compare with Step 1 — you get `AnimalRegistry.register()` and
+`App.main() --calls--> register()`, immediately, before any CI.
 
 ---
 
-## Step 4 — push (publish → auto-assemble the shared graph)
+## Step 5 — push (publish → auto-assemble the shared graph)
 
 ```bash
 git push
-```
-
-- The producer CI builds and publishes `graphify-sample-lib-<sha>`.
-- It fires a `repository_dispatch` at the consumer, which fetches that artifact,
-  validates it, and assembles a fresh `graphify-shared-baseline`.
-
-Watch:
-
-```bash
 gh run watch -R zouariste/gh-graph-producer
 gh run watch -R zouariste/gh-graph-consumer
 ```
 
+Producer publishes `graphify-sample-lib-<sha>` → `repository_dispatch` → consumer
+assembles a fresh `graphify-shared-baseline`.
+
 ---
 
-## Step 5 — ask the SHARED graph (via Claude)
-
-Still in Claude, ask for the shared view:
+## Step 6 — AFTER (shared): ask the shared graph
 
 > **Query the shared graph: what registers animals?**
 
-The `graph` skill runs the wrapper, which re-fetches the baseline only because a
-new run was published, verifies its checksum, then queries. Or run it directly:
-
 ```bash
+cd ../consumer   # the consumer holds the assembled shared graph
 scripts/graph-query "what registers animals"
-scripts/graph-query --explain "Animal"        # ids are prefixed sample-lib::…
+scripts/graph-query --explain "AnimalRegistry"
 ```
 
-Expect the same `register` / `speak` relationships — now served from the
-**shared** graph that the consumer assembled from your pushed commit.
-
-> Query by **label** (`Animal`, `register`, `speak`). graphify asks for the full
-> prefixed id (`sample-lib::…`) only when a label is ambiguous.
+Same relationships, now served from the **shared** graph the consumer assembled
+from your pushed commit. Query by **label** (`Animal`, `register`); use the full
+`sample-lib::…` id only when graphify reports an ambiguous label.
 
 ---
 
